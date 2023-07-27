@@ -100,12 +100,6 @@ ProcessSoundEffectQueue2_CoinGetPart2:
 	CMP #$30
 	BNE ProcessSoundEffectQueue2_ThenDecrementTimer
 
-	; The second note of the coin sound effect modifies the frequency directly!
-	; This was probably done to do the "same" thing in similar instructions.
-	;
-	; It's interesting to point out that the closest "regular" note ($68) would
-	; end up with SQ1_LO being $53 instead of $54 from the frequency tweak logic!
-
 	LDA #$54
 	STA SQ1_LO
 
@@ -235,15 +229,14 @@ ProcessSoundEffectQueue2_GrowingPart2:
 	BCS ProcessSoundEffectQueue2_DecrementTimer
 
 	TAY
-	LDA GrowingSoundData - 1, Y
+	LDA MushroomSoundData - 1, Y
 	LDX #$5D
 	LDY #$7F
 	JSR PlaySquare1Sweep
 
 	JMP ProcessSoundEffectQueue2_DecrementTimer
 
-; Fun fact: When you slow this down, you get the SMB1 end of level fanfare.
-GrowingSoundData:
+MushroomSoundData:
 	.db $6A, $74, $6A, $64, $5C, $52, $5C, $52, $4C, $44, $66, $70, $66, $60, $58, $4E
 	.db $58, $4E, $48, $40, $56, $60, $56, $50, $48, $3E, $48, $3E, $38, $30 ; $10
 
@@ -319,11 +312,11 @@ ProcessSoundEffectQueue1_Exit:
 .include "src/music/sound-effect-data.asm"
 
 
-ProcessSoundEffectQueue3_WhaleSpout:
+ProcessSoundEffectQueue3_ShortNoise:
 	LDA #$02
 	STA SoundEffectTimer3
 
-ProcessSoundEffectQueue3_WhaleSpoutPart2:
+ProcessSoundEffectQueue3_ShortNoisePart2:
 	LDA #$1A
 	STA NOISE_VOL
 	LDA #$04
@@ -336,43 +329,33 @@ ProcessSoundEffectQueue3:
 	BEQ ProcessSoundEffectQueue3_Part2
 
 	STY SoundEffectPlaying3
-
-	; Whale spout
 	LSR SoundEffectQueue3
-	BCS ProcessSoundEffectQueue3_WhaleSpout
+	BCS ProcessSoundEffectQueue3_ShortNoise
 
-	; Rocket
 	LSR SoundEffectQueue3
-	BCS ProcessSoundEffectQueue3_Rocket
+	BCS ProcessSoundEffectQueue3_Rumble
 
-	; POW rumble
 	LSR SoundEffectQueue3
-	BCS ProcessSoundEffectQueue3_POWRumble
+	BCS ProcessSoundEffectQueue3_Rumble
 
 ProcessSoundEffectQueue3_Part2:
 	LDA SoundEffectPlaying3
-
-	; Whale spout
 	LSR A
-	BCS ProcessSoundEffectQueue3_WhaleSpoutPart2
+	BCS ProcessSoundEffectQueue3_ShortNoisePart2
 
-	; Rocket
 	LSR A
-	BCS ProcessSoundEffectQueue3_RocketPart2
+	BCS ProcessSoundEffectQueue3_RumblePart2
 
-	; POW rumble
 	LSR A
-	BCS ProcessSoundEffectQueue3_POWRumblePart2
+	BCS ProcessSoundEffectQueue3_RumblePart2
 
 	RTS
 
-ProcessSoundEffectQueue3_Rocket:
-ProcessSoundEffectQueue3_POWRumble:
+ProcessSoundEffectQueue3_Rumble:
 	LDA #$7F
 	STA SoundEffectTimer3
 
-ProcessSoundEffectQueue3_RocketPart2:
-ProcessSoundEffectQueue3_POWRumblePart2:
+ProcessSoundEffectQueue3_RumblePart2:
 	LDY SoundEffectTimer3
 	LDA ProcessMusicQueue, Y ; weird, but i guess that's one way to get "random" noise
 	ORA #$0C

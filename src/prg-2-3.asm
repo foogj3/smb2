@@ -289,7 +289,7 @@ ENDIF
 
 	; Handle the stopwatch
 	LDA byte_RAM_10
-	AND #%00011111
+	AND #$1F
 	BNE AreaMainRoutine_DecrementStopwatch
 
 	LDY #SoundEffect1_StopwatchTick
@@ -941,7 +941,7 @@ EnemyInit_BasicMovement:
 
 	; Double the speed of objects when bit 6 of 46E is set
 	LDA EnemyArray_46E, X
-	AND #SpriteFlags46E_DoubleSpeed
+	AND #%01000000
 	BEQ EnemyInit_BasicMovementExit
 	ASL ObjectXVelocity, X ; Change the speed of certain objects?
 
@@ -968,34 +968,34 @@ EnemyInit_BeezoDiving:
 	ADC #$00
 	STA ObjectXHi, X
 
-;
-; Beezo dives down to the player's y-position at the time of initialization
-;
+; =============== S U B R O U T I N E =======================================
+
 EnemyBeezoDiveSetup:
 	LDA PlayerYHi
-	BPL EnemyBeezoDiveSetup_GetPlayerYTile
+	BPL loc_BANK2_84D5
 
 	; If above the screen, just abort and use the least descend-y one
 	LDY #$00
-	BEQ EnemyBeezoDiveSetup_SetYVelocity
+	BEQ loc_BANK2_84DF
 
-	; Check how far down the screen the player is
-EnemyBeezoDiveSetup_GetPlayerYTile:
-	LDA PlayerYLo
+loc_BANK2_84D5:
+	LDA PlayerYLo ; Check how far down on the screen the player is
 	SEC
 	SBC ScreenYLo
-	; Take the highest 4 bits (round down to 16x16 meta-tile)
-	LSR A
-	LSR A
+	LSR A ; And then take only the highest 4 bits
+	LSR A ; (divide by 16)
 	LSR A
 	LSR A
 	TAY
 
-EnemyBeezoDiveSetup_SetYVelocity:
+loc_BANK2_84DF:
 	LDA BeezoDiveSpeedTable, Y
 	STA ObjectYVelocity, X
 	RTS
 
+; End of function EnemyBeezoDiveSetup
+
+; ---------------------------------------------------------------------------
 
 EnemyInit_Phanto:
 	JSR EnemyInit_Basic
@@ -1006,6 +1006,7 @@ EnemyInit_Phanto:
 	STA PhantoActivateTimer
 	RTS
 
+; =============== S U B R O U T I N E =======================================
 
 EnemyInit_Bobomb:
 	JSR EnemyInit_Basic
@@ -1014,11 +1015,14 @@ EnemyInit_Bobomb:
 	STA ObjectTimer1, X
 	RTS
 
+; End of function EnemyInit_Bobomb
+
+; ---------------------------------------------------------------------------
 
 HandleEnemyState_Dead:
-	JSR CheckObjectCollision
+	JSR CheckObjectCollision ; collision detection
 
-	JSR HandleEnemyScreenBounds
+	JSR sub_BANK2_88E8
 
 	LDA EnemyState, X
 	BNE MakeEnemyFlipUpsideDown
@@ -1026,7 +1030,7 @@ HandleEnemyState_Dead:
 	LDA EnemyArray_SpawnsDoor, X
 	BEQ EnemyDeathMaybe
 
-HandleEnemyState_Dead_BossBeaten:
+loc_BANK2_8509:
 	STA BossBeaten
 	JSR DestroyOnscreenEnemies
 
@@ -1043,17 +1047,18 @@ HandleEnemyState_Dead_BossBeaten:
 	LDA #$B0
 	LDY ObjectType, X
 	CPY #Enemy_Clawgrip
-	BNE HandleEnemyState_Dead_TurnIntoPuffOfSmoke
+	BNE loc_BANK2_852D
 
 	LDA #$70
 
-HandleEnemyState_Dead_TurnIntoPuffOfSmoke:
+loc_BANK2_852D:
 	STA ObjectYLo, X
-	LDA #ObjAttrib_16x32 | ObjAttrib_Palette1
+	LDA #%01000001
 	STA ObjectAttributes, X
 	STA EnemyArray_46E, X
 	JMP TurnIntoPuffOfSmoke
 
+; ---------------------------------------------------------------------------
 
 EnemyDeathMaybe:
 	LDA ObjectType, X
@@ -1071,7 +1076,7 @@ EnemyDeathMaybe:
 	LDA #EnemyState_Alive ; convert dead enemy to living heart
 	STA EnemyState, X
 	STA ObjectAttributes, X
-	LDA #SpriteFlags46E_Damage | SpriteFlags46E_Unliftable | SpriteFlags46E_NoEnemyCollision
+	LDA #%00000111 ; what's this magic number for?
 	STA EnemyArray_46E, X
 	LDA #Enemy_Heart
 	STA ObjectType, X
@@ -1140,17 +1145,17 @@ ApplyObjectMovement_Exit:
 
 
 HandleEnemyState_BlockFizzle:
-	JSR HandleEnemyScreenBounds
+	JSR sub_BANK2_88E8
 
 	LDA ObjectTimer1, X
-	BEQ HandleEnemyState_Exit
+	BEQ loc_BANK2_85AF
 
 	TAY
 	LSR A
 	LSR A
 	AND #$01
 	STA EnemyMovementDirection, X
-	LDA #ObjAttrib_Palette1 ; also SpriteFlags46E_Damage
+	LDA #%00000001
 	STA ObjectAttributes, X
 	STA EnemyArray_46E, X
 	LDA #$3C
@@ -1162,14 +1167,15 @@ HandleEnemyState_BlockFizzle:
 loc_BANK2_85AC:
 	JMP RenderSprite_DrawObject
 
+; ---------------------------------------------------------------------------
 
-HandleEnemyState_Exit:
+loc_BANK2_85AF:
 	JMP EnemyDestroy
 
 
 HandleEnemyState_Sinking:
 	; Collision detection
-	JSR HandleEnemyScreenBounds
+	JSR sub_BANK2_88E8
 
 	JSR EnemyBehavior_CheckDamagedInterrupt
 
@@ -1183,7 +1189,7 @@ HandleEnemyState_Sinking:
 
 loc_BANK2_85C1:
 	LDA ObjectTimer1, X
-	BEQ HandleEnemyState_Exit
+	BEQ loc_BANK2_85AF
 
 	LDA ObjectType, X
 	CMP #Enemy_VegetableSmall
@@ -1234,31 +1240,31 @@ EnemyInitialAccelerationTable:
 
 
 HandleEnemyState_BombExploding:
-	JSR HandleEnemyScreenBounds
+	JSR sub_BANK2_88E8
 
 	LDA byte_RAM_EE
 	ORA byte_RAM_EF
-	BNE HandleEnemyState_Exit
+	BNE loc_BANK2_85AF
 
 	LDA ObjectTimer1, X
-	BEQ HandleEnemyState_Exit
+	BEQ loc_BANK2_85AF
 
 	CMP #$1A
-	BCS HandleEnemyState_DrawExplosion
+	BCS loc_BANK2_8610
 
 	SBC #$11
-	BMI HandleEnemyState_DrawExplosion
+	BMI loc_BANK2_8610
 
 	TAY
-	JSR ExplodeNearbyBlocks
+	JSR sub_BANK2_8670
 
-HandleEnemyState_DrawExplosion:
+loc_BANK2_8610:
 	LDA #$60
 	STA byte_RAM_0
 	LDX #$00
 	LDY #$40
 
-HandleEnemyState_DrawExplosion_Loop:
+loc_BANK2_8618:
 	LDA SpriteTempScreenY
 	CLC
 	ADC ExplosionTileYOffsets, X
@@ -1280,18 +1286,18 @@ HandleEnemyState_DrawExplosion_Loop:
 	INY
 	INX
 	CPX #$08
-	BNE HandleEnemyState_DrawExplosion_Loop
+	BNE loc_BANK2_8618
 
 	LDX byte_RAM_12
 	JMP CheckObjectCollision
 
 ; ---------------------------------------------------------------------------
 
-ExplodeNearbyBlocks_Exit:
+locret_BANK2_8649:
 	RTS
 
-
-ExplosionOffsetXLo:
+; ---------------------------------------------------------------------------
+byte_BANK2_864A:
 	.db $FB
 	.db $08
 	.db $15
@@ -1302,7 +1308,7 @@ ExplosionOffsetXLo:
 	.db $08
 	.db $15
 
-ExplosionOffsetXHi:
+byte_BANK2_8653:
 	.db $FF
 	.db $00
 	.db $00
@@ -1313,7 +1319,7 @@ ExplosionOffsetXHi:
 	.db $00
 	.db $00
 
-ExplosionOffsetYLo:
+byte_BANK2_865C:
 	.db $FC
 	.db $FC
 	.db $FC
@@ -1324,7 +1330,7 @@ ExplosionOffsetYLo:
 	.db $14
 	.db $14
 
-ExplosionOffsetYHi:
+byte_BANK2_8665:
 	.db $FF
 	.db $FF
 	.db $FF
@@ -1335,45 +1341,37 @@ ExplosionOffsetYHi:
 	.db $00
 	.db $00
 
-ExplosionTileLayoutHi:
-	.db >(DecodedLevelData - $100)
-	.db >(SubAreaTileLayout - $100)
+byte_BANK2_866E:
+	.db $5F
+	.db $06
 
-;
-; Blow up blocks near this object
-;
-; Input
-;   X = enemy slot
-;   Y = index
-;
-ExplodeNearbyBlocks:
+; =============== S U B R O U T I N E =======================================
+
+sub_BANK2_8670:
 	LDA ObjectXLo, X
 	CLC
-	ADC ExplosionOffsetXLo, Y
+	ADC byte_BANK2_864A, Y
 	STA byte_RAM_C
 	LDA ObjectXHi, X
-	ADC ExplosionOffsetXHi, Y
+	ADC byte_BANK2_8653, Y
 	STA byte_RAM_D
-	CMP #$0B
-	BCS ExplodeNearbyBlocks_Exit
+	CMP #$B
+	BCS locret_BANK2_8649
 
 	LDA ObjectYLo, X
-	ADC ExplosionOffsetYLo, Y
+	ADC byte_BANK2_865C, Y
 	AND #$F0
 	STA byte_RAM_E
 	STA byte_RAM_B
 	LDA ObjectYHi, X
-	ADC ExplosionOffsetYHi, Y
+	ADC byte_BANK2_8665, Y
 	STA byte_RAM_F
-	CMP #$0A
-	BCS ExplodeNearbyBlocks_Exit
+	CMP #$A
+	BCS locret_BANK2_8649
 
 	LDY IsHorizontalLevel
 	BNE loc_BANK2_86BD
 
-	; Vertical level
-
-	; Convert vertical pixel position to tile position
 	LSR A
 	ROR byte_RAM_E
 	LSR A
@@ -1384,17 +1382,14 @@ ExplodeNearbyBlocks:
 	ROR byte_RAM_E
 	LDA byte_RAM_E
 
-	; Determine vertical page
 	LDY #$FF
-ExplodeNearbyBlocks_VerticalPageLoop:
+loc_BANK2_86AD:
 	SEC
 	SBC #$0F
 	INY
-	BCS ExplodeNearbyBlocks_VerticalPageLoop
+	BCS loc_BANK2_86AD
 
 	STY byte_RAM_D
-
-	; Store Y as upper nybble
 	ADC #$0F
 	ASL A
 	ASL A
@@ -1403,32 +1398,26 @@ ExplodeNearbyBlocks_VerticalPageLoop:
 	STA byte_RAM_E
 
 loc_BANK2_86BD:
-	; Convert horizontal pixel position to tile position
 	LDA byte_RAM_C
 	LSR A
 	LSR A
 	LSR A
 	LSR A
 	STA byte_RAM_4
-
-	; Upper nybble is Y tile, lower nybble is X tile
 	ORA byte_RAM_E
 	STA byte_RAM_5
-
-	; Determine whether we're in the subarea
 	LDY #$00
 	LDA ScreenBoundaryLeftHi
-	CMP #$0A
+	CMP #$A
 	BNE loc_BANK2_86D5
 
-	; We're in a subarea, treat it as page 0
 	STY byte_RAM_D
 	INY
 
 loc_BANK2_86D5:
 	LDA #$10
 	STA byte_RAM_7
-	LDA ExplosionTileLayoutHi, Y
+	LDA byte_BANK2_866E, Y
 	STA byte_RAM_8
 	LDY byte_RAM_D
 
@@ -1445,33 +1434,35 @@ loc_BANK2_86E0:
 
 	LDY byte_RAM_5
 	LDA (byte_RAM_7), Y
-	CMP #BackgroundTile_BombableBrick
-	BEQ ExplodeNearbyBlocks_DestroyBlock
+	CMP #$9D
+	BEQ loc_BANK2_8701
 
-	CMP #BackgroundTile_DiggableSand
-	BEQ ExplodeNearbyBlocks_DestroyBlock
+	CMP #$93
+	BEQ loc_BANK2_8701
 
-	CMP #BackgroundTile_JarSmall
-	BEQ ExplodeNearbyBlocks_DestroyBlock
+	CMP #$72
+	BEQ loc_BANK2_8701
 
 	RTS
 
+; ---------------------------------------------------------------------------
 
-ExplodeNearbyBlocks_DestroyBlock:
-	LDA #BackgroundTile_Sky
+loc_BANK2_8701:
+	LDA #$40
 	STA (byte_RAM_7), Y
-
 	LDA byte_RAM_D
 	AND #$01
 	EOR #$01
 	ASL A
+
+loc_BANK2_870C:
 	ASL A
 	LDY IsHorizontalLevel
-	BNE ExplodeNearbyBlocks_DestroyBlock_UpdatePPU
+	BNE loc_BANK2_8712
 
 	ASL A
 
-ExplodeNearbyBlocks_DestroyBlock_UpdatePPU:
+loc_BANK2_8712:
 	PHA
 	LDA byte_RAM_E
 	STA byte_RAM_2
@@ -1487,7 +1478,6 @@ ExplodeNearbyBlocks_DestroyBlock_UpdatePPU:
 	ROL byte_RAM_0
 	AND #$E0
 	STA byte_RAM_1
-
 	LDA byte_RAM_3
 	LSR A
 	LSR A
@@ -1498,51 +1488,49 @@ ExplodeNearbyBlocks_DestroyBlock_UpdatePPU:
 	CLC
 	ADC #$20
 	STA PPUBuffer_301 + 6, X
-
 	PLA
 	ORA byte_RAM_0
 	STA PPUBuffer_301, X
 	ADC #$00
 	STA PPUBuffer_301 + 5, X
+
+loc_BANK2_874B:
 	LDA #$02
 	STA PPUBuffer_301 + 2, X
 	STA PPUBuffer_301 + 7, X
-
 	LDA #$FA
 	STA PPUBuffer_301 + 3, X
 	STA PPUBuffer_301 + 4, X
 	STA PPUBuffer_301 + 8, X
 	STA PPUBuffer_301 + 9, X
-
 	LDA #$00
 	STA PPUBuffer_301 + 10, X
 	TXA
 	CLC
-	ADC #$0A
+	ADC #$A
 	STA byte_RAM_300
-
-	; Look for a slot to create a block fizzle sprite
 	LDX #$08
-ExplodeNearbyBlocks_FindSprite_Loop:
+
+loc_BANK2_876F:
 	LDA EnemyState, X
-	BEQ ExplodeNearbyBlocks_CreateSprite
+	BEQ loc_BANK2_8778
 
 	DEX
-	BPL ExplodeNearbyBlocks_FindSprite_Loop
+	BPL loc_BANK2_876F
 
-	BMI ExplodeNearbyBlocks_CreateSprite_Exit
+	BMI loc_BANK2_8795
 
-ExplodeNearbyBlocks_CreateSprite:
+loc_BANK2_8778:
 	LDA byte_RAM_C
 	AND #$F0
 	STA ObjectXLo, X
 	LDA byte_RAM_D
 	LDY IsHorizontalLevel
-	BNE ExplodeNearbyBlocks_CreateSprite_Position
+	BNE loc_BANK2_8785
 
 	TYA
 
-ExplodeNearbyBlocks_CreateSprite_Position:
+loc_BANK2_8785:
 	STA ObjectXHi, X
 	LDA byte_RAM_B
 	STA ObjectYLo, X
@@ -1550,14 +1538,15 @@ ExplodeNearbyBlocks_CreateSprite_Position:
 	STA ObjectYHi, X
 	JSR EnemyInit_BasicWithoutTimer
 
-	JSR SetBlockFizzle
+	JSR sub_BANK2_98C4
 
-ExplodeNearbyBlocks_CreateSprite_Exit:
-	; Restore next object index
+loc_BANK2_8795:
 	LDX byte_RAM_12
 
-HandleEnemyState_PuffOfSmoke_Exit:
+locret_BANK2_8797:
 	RTS
+
+; End of function sub_BANK2_8670
 
 
 PuffOfSmokeAnimationTable:
@@ -1568,7 +1557,7 @@ PuffOfSmokeAnimationTable:
 
 
 HandleEnemyState_PuffOfSmoke:
-	JSR HandleEnemyScreenBounds
+	JSR sub_BANK2_88E8
 
 	LDA ObjectAttributes, X
 	ORA #ObjAttrib_Mirrored
@@ -1576,7 +1565,7 @@ HandleEnemyState_PuffOfSmoke:
 	LDA ObjectTimer1, X
 	BNE loc_BANK2_87AC
 
-	JMP HandleEnemyState_PuffOfSmoke_CheckDestroy
+	JMP loc_BANK2_8842
 
 ; ---------------------------------------------------------------------------
 
@@ -1589,11 +1578,11 @@ loc_BANK2_87AC:
 	JSR RenderSprite_DrawObject
 
 	LDA EnemyArray_SpawnsDoor, X
-	BEQ HandleEnemyState_PuffOfSmoke_Exit
+	BEQ locret_BANK2_8797
 
 	LDA ObjectTimer1, X
 	CMP #$03
-	BNE HandleEnemyState_PuffOfSmoke_Exit
+	BNE locret_BANK2_8797
 
 	LDY #$22
 	LDA ObjectType, X
@@ -1611,8 +1600,8 @@ loc_BANK2_87CA:
 	INY
 	STY PPUBuffer_EndOfLevelDoor + $0E
 	STY PPUBuffer_EndOfLevelDoor + $17
-
 	LDY #$03
+
 loc_BANK2_87D9:
 	; Boss door PPU updates
 	LDA EndOfLevelDoorPage, X
@@ -1683,27 +1672,29 @@ DrawEndOfLevelDoorTiles:
 	STA (byte_RAM_0), Y
 	RTS
 
+; ---------------------------------------------------------------------------
 
-HandleEnemyState_PuffOfSmoke_CheckDestroy:
-	; Fryguy flames are extinguished in a puff of smoke
+loc_BANK2_8842:
 	LDA ObjectType, X
 	CMP #Enemy_FryguySplit
-	BNE HandleEnemyState_PuffOfSmoke_Destroy
+	BNE loc_BANK2_8855
 
 	DEC FryguySplitFlames
-	BPL HandleEnemyState_PuffOfSmoke_Destroy
+	BPL loc_BANK2_8855
 
-	; Last Fryguy mini flame spawns the door
 	INC EnemyArray_SpawnsDoor, X
 	INC ObjectType, X
-	JMP HandleEnemyState_Dead_BossBeaten
+	JMP loc_BANK2_8509
 
-HandleEnemyState_PuffOfSmoke_Destroy:
+; ---------------------------------------------------------------------------
+
+loc_BANK2_8855:
 	JMP EnemyDestroy
 
+; ---------------------------------------------------------------------------
 
 HandleEnemyState_Sand:
-	JSR HandleEnemyScreenBounds
+	JSR sub_BANK2_88E8
 
 	LDA #$12
 	STA ObjectAttributes, X
@@ -1719,9 +1710,9 @@ HandleEnemyState_Sand:
 	CPY #$10
 	BCS loc_BANK2_8885
 
-	LDA #SpriteFlags46E_MirrorAnimation
+	LDA #%10000000
 	STA EnemyArray_46E, X
-	LDA #ObjAttrib_Palette1
+	LDA #$01
 	STA ObjectAttributes, X
 	ASL A
 	STA EnemyMovementDirection, X
@@ -1745,174 +1736,150 @@ loc_BANK2_8888:
 loc_BANK2_8891:
 	JMP EnemyDestroy
 
+; =============== S U B R O U T I N E =======================================
 
-;
-; Ensures that we're properly cropping sprites that are outside of the
-; horizontal screenscreen bounds by masking tiles that cross the threshold
-;
-; Output
-;   byte_RAM_EE = sprite clipping (horizontal)
-;
-ScreenSpriteClipping_Horizontal:
+sub_BANK2_8894:
 	LDA #$00
 	STA byte_RAM_EE
 	LDA ObjectAttributes, X
 	LDY #$01
-
-	; Checks for double-wide sprites
 	AND #ObjAttrib_Horizontal
-	BNE ScreenSpriteClipping_Horizontal_WideSprite
+	BNE loc_BANK2_88B9
 
 	LDA ObjectType, X
 	CMP #Enemy_Pokey
-	BEQ ScreenSpriteClipping_Horizontal_WideSprite
+	BEQ loc_BANK2_88B9
 
 	CMP #Enemy_Ostro
-	BEQ ScreenSpriteClipping_Horizontal_WideSprite
+	BEQ loc_BANK2_88B9
 
 	CMP #Enemy_HawkmouthBoss
-	BEQ ScreenSpriteClipping_Horizontal_WideSprite
+	BEQ loc_BANK2_88B9
 
 	CMP #Enemy_Clawgrip
-	BEQ ScreenSpriteClipping_Horizontal_WideSprite
+	BEQ loc_BANK2_88B9
 
 	LDA EnemyArray_46E, X
-	AND #SpriteFlags46E_WideSprite
-	BEQ ScreenSpriteClipping_Horizontal_Loop
+	AND #%00100000
+	BEQ loc_BANK2_88BB
 
-ScreenSpriteClipping_Horizontal_WideSprite:
+loc_BANK2_88B9:
+	; something for double-wide sprites?
 	LDY #$03
 
 ; seems to be logic for positioning sprites onscreen
-ScreenSpriteClipping_Horizontal_Loop:
+loc_BANK2_88BB:
 	LDA ObjectXLo, X
 	CLC
-	ADC HorizontalScreenBoundsThreshold, Y
+	ADC byte_BANK2_88E4, Y
 	STA byte_RAM_E
-
 	LDA ObjectXHi, X
 	ADC #$00
 	STA byte_RAM_F
-
 	LDA byte_RAM_E
 	CMP ScreenBoundaryLeftLo
 	LDA byte_RAM_F
 	SBC ScreenBoundaryLeftHi
-
-	BEQ ScreenSpriteClipping_Horizontal_Next
+	BEQ loc_BANK2_88DC
 
 	LDA byte_RAM_EE
-	ORA HorizontalScreenBoundsClipping, Y
+	ORA byte_BANK2_88E0, Y
 	STA byte_RAM_EE
 
-ScreenSpriteClipping_Horizontal_Next:
+loc_BANK2_88DC:
 	DEY
-	BPL ScreenSpriteClipping_Horizontal_Loop
+	BPL loc_BANK2_88BB
 
-ScreenSpriteClipping_Exit:
+locret_BANK2_88DF:
 	RTS
 
+; End of function sub_BANK2_8894
 
-HorizontalScreenBoundsClipping:
-	.db %00001000
-	.db %00000100
-	.db %00000010
-	.db %00000001
-
-HorizontalScreenBoundsThreshold:
+; ---------------------------------------------------------------------------
+; threshold for x-wrapping sprites near the edge of the screen
+byte_BANK2_88E0: ; hi
+	.db $08
+	.db $04
+	.db $02
+	.db $01
+byte_BANK2_88E4: ; lo
 	.db $00
 	.db $08
 	.db $10
 	.db $18
 
+; =============== S U B R O U T I N E =======================================
 
-;
-; Related to destroying offscreen sprites
-;
-; Output
-;   byte_RAM_EE = sprite clipping (horizontal)
-;   byte_RAM_EF = sprite clipping (vertical)
-;
-HandleEnemyScreenBounds:
-	JSR ScreenSpriteClipping_Horizontal
+sub_BANK2_88E8:
+	JSR sub_BANK2_8894
 
-	; First, determine whether we're doing any vertical cropping
-ScreenSpriteClipping_Vertical:
 	LDA #$22
 	LDY ObjectType, X
 	CPY #Enemy_Wart
-	BEQ ScreenSpriteClipping_Vertical_CheckScreenY
+	BEQ loc_BANK2_88F9
 
 	CPY #Enemy_Tryclyde
-	BEQ ScreenSpriteClipping_Vertical_CheckScreenY
+	BEQ loc_BANK2_88F9
 
 	LDA #$10
-ScreenSpriteClipping_Vertical_CheckScreenY:
+
+loc_BANK2_88F9:
 	ADC ObjectYLo, X
 	STA byte_RAM_0
 	LDA ObjectYHi, X
 	ADC #$00
 	STA byte_RAM_1
-
 	LDA byte_RAM_0
 	CMP ScreenYLo
 	LDA byte_RAM_1
 	SBC ScreenYHi
 	STA byte_RAM_EF
 
-	; The next few enemies are preserved even when they're offscreen
 	CPY #Enemy_Phanto
-	BEQ ScreenSpriteClipping_Exit
+	BEQ locret_BANK2_88DF
 
 	CPY #Enemy_FlyingCarpet
-	BEQ ScreenSpriteClipping_Exit
+	BEQ locret_BANK2_88DF
 
 	CPY #Enemy_HawkmouthLeft
-	BEQ ScreenSpriteClipping_Exit
+	BEQ locret_BANK2_88DF
 
 	CPY #Enemy_HawkmouthBoss
-	BEQ ScreenSpriteClipping_Exit
+	BEQ locret_BANK2_88DF
 
-	; Optimization? Skips despawn evaluation on alternating frames
 	TXA
 	AND #$01
 	STA byte_RAM_0
 	LDA byte_RAM_10
 	AND #$01
 	EOR byte_RAM_0
-	BNE ScreenSpriteClipping_Exit
+	BNE locret_BANK2_88DF
 
-	; Calculate vertical despawn boundaries
 	LDA ScreenYLo
 	SBC #$30
 	STA byte_RAM_1
-
 	LDA ScreenYHi
 	SBC #$00
 	STA byte_RAM_0
 	INC byte_RAM_0
-
 	LDA ScreenYLo
 	ADC #$FF
 	PHP
 	ADC #$30
 	STA byte_RAM_3
-
 	LDA ScreenYHi
 	ADC #$00
 	PLP
 	ADC #$00
 	STA byte_RAM_2
 	INC byte_RAM_2
-
-	; Evaluate object against vertical despawn boundaries
 	LDA ObjectYLo, X
 	CMP byte_RAM_1
 	LDY ObjectYHi, X
 	INY
 	TYA
 	SBC byte_RAM_0
-	BMI HandleEnemyScreenBounds_CheckCarried
+	BMI loc_BANK2_89A5
 
 	LDA ObjectYLo, X
 	CMP byte_RAM_3
@@ -1920,35 +1887,29 @@ ScreenSpriteClipping_Vertical_CheckScreenY:
 	INY
 	TYA
 	SBC byte_RAM_2
-	BPL HandleEnemyScreenBounds_CheckCarried
+	BPL loc_BANK2_89A5
 
-	; Calculate horizontal despawn boundaries
 	LDA ScreenBoundaryLeftLo
 	SBC #$30
 	STA byte_RAM_1
-
 	LDA ScreenBoundaryLeftHi
 	SBC #$00
 	STA byte_RAM_0
 	INC byte_RAM_0
-
 	LDA ScreenBoundaryRightLo
 	ADC #$30
 	STA byte_RAM_3
-
 	LDA ScreenBoundaryRightHi
 	ADC #$00
 	STA byte_RAM_2
 	INC byte_RAM_2
-
-	; Evaluate object against horizontal despawn boundaries
 	LDA ObjectXLo, X
 	CMP byte_RAM_1
 	LDY ObjectXHi, X
 	INY
 	TYA
 	SBC byte_RAM_0
-	BMI HandleEnemyScreenBounds_CheckDeathSquawk:
+	BMI loc_BANK2_899C
 
 	LDA ObjectXLo, X
 	CMP byte_RAM_3
@@ -1958,17 +1919,19 @@ ScreenSpriteClipping_Vertical_CheckScreenY:
 	SBC byte_RAM_2
 	BMI EnemyDestroy_Exit
 
-HandleEnemyScreenBounds_CheckDeathSquawk:
-	; If this has the boss death squawk, do not despawn
+loc_BANK2_899C:
 	LDY ObjectType, X
 	LDA EnemyArray_46E_Data, Y
-	AND #SpriteFlags46E_DeathSquawk
+	AND #$08
 	BNE EnemyDestroy_Exit
 
-HandleEnemyScreenBounds_CheckCarried:
-	; If the player is carrying this object, do not despawn
+loc_BANK2_89A5:
 	LDA ObjectBeingCarriedTimer, X
 	BNE EnemyDestroy_Exit
+
+; End of function sub_BANK2_88E8
+
+; =============== S U B R O U T I N E =======================================
 
 EnemyDestroy:
 	; load raw enemy data offset so we can allow the level object to respawn
@@ -1988,6 +1951,7 @@ EnemyDestroy_AfterAllowRespawn:
 EnemyDestroy_Exit:
 	RTS
 
+; End of function EnemyDestroy
 
 ; ---------------------------------------------------------------------------
 
@@ -2002,7 +1966,7 @@ HandleEnemyState_Alive:
 	INC ObjectProjectileTimer, X
 
 loc_BANK2_89C9:
-	JSR HandleEnemyScreenBounds
+	JSR sub_BANK2_88E8
 
 	LDA PlayerState
 	CMP #PlayerState_ChangingSize
@@ -2453,7 +2417,7 @@ EnemyBehavior_Fireball_CheckCollision:
 	JSR TurnIntoPuffOfSmoke
 
 EnemyBehavior_Fireball_Exit:
-	JMP ApplyObjectPhysics
+	JMP sub_BANK2_9430
 
 
 PanserFireXVelocity:
@@ -2488,7 +2452,7 @@ loc_BANK2_8C1A:
 loc_BANK2_8C22:
 	JSR ApplyObjectMovement
 
-	LDA #SpriteFlags46E_Damage | SpriteFlags46E_Unliftable | SpriteFlags46E_MirrorAnimation
+	LDA #%10000011
 	STA EnemyArray_46E, X
 	LDA #$02
 	STA EnemyMovementDirection, X
@@ -2714,9 +2678,9 @@ EnemyInit_Hawkmouth:
 	DEC ObjectYLo, X
 	DEC ObjectYLo, X
 	LDY #$01
-	STY HawkmouthCollisionHitboxTop_RAM
+	STY ObjectCollisionHitboxTop_RAM + $0B
 	INY
-	STY HawkmouthCollisionHitboxLeft_RAM
+	STY ObjectCollisionHitboxLeft_RAM + $0B
 
 
 EnemyInit_Stationary:
@@ -2798,8 +2762,8 @@ loc_BANK2_8DBA:
 	AND #$03
 	BNE loc_BANK2_8DD8
 
-	DEC HawkmouthCollisionHitboxTop_RAM
-	INC HawkmouthCollisionHitboxLeft_RAM
+	DEC ObjectCollisionHitboxTop_RAM + $0B
+	INC ObjectCollisionHitboxLeft_RAM + $0B
 
 loc_BANK2_8DD8:
 	JMP RenderSprite_HawkmouthLeft
@@ -2924,37 +2888,27 @@ EnemyInit_Trouter:
 	LDA #$80
 	STA ObjectTimer1, X
 
-EnemyBehavior_Trouter_Exit:
+locret_BANK2_8E78:
 	RTS
 
 
-;
-; Trouter jump height, which is determined by initial vertical position
-;
-TrouterJumpVelocityY:
-	.db $AC ; $0
-	.db $AE ; $1
-	.db $B1 ; $2
-	.db $B5 ; $3
-	.db $B8 ; $4
-	.db $BC ; $5
-	.db $C0 ; $6
-	.db $C4 ; $7
-	.db $C8 ; $8
-	.db $CC ; $9
-	.db $D2 ; $A
-	.db $D8 ; $B
-; They didn't even bother this close to the bottom of the screen!
-IFDEF EXPAND_TABLES
-	.db $DF ; $C
-	.db $E6 ; $D
-	.db $EF ; $E
-	.db $F8 ; $F
-ENDIF
+byte_BANK2_8E79:
+	.db $AC
+	.db $AE
+	.db $B1
+	.db $B5
+	.db $B8
+	.db $BC
+	.db $C0
+	.db $C4
+	.db $C8
+	.db $CC
+	.db $D2
+	.db $D8
 
-TrouterMaxY:
-	.db $92 ; vertical level
-	.db $EA ; horizontal level
+byte_BANK2_8E85:
+	.db $92
+	.db $EA
 
 
 EnemyBehavior_Trouter:
@@ -2965,33 +2919,31 @@ EnemyBehavior_Trouter:
 
 	JSR EnemyBehavior_CheckBeingCarriedTimerInterrupt
 
-	LDA #ObjAttrib_Palette1 | ObjAttrib_FrontFacing
+	LDA #$09
 	LDY ObjectYVelocity, X
-	BMI EnemyBehavior_Trouter_SetObjectAttributes
+	BMI loc_BANK2_8E9A
 
-	LDA #ObjAttrib_Palette1 | ObjAttrib_FrontFacing | ObjAttrib_UpsideDown
-EnemyBehavior_Trouter_SetObjectAttributes:
+	LDA #$89
+
+loc_BANK2_8E9A:
 	STA ObjectAttributes, X
-
 	LDY IsHorizontalLevel
 	LDA ObjectYLo, X
-	CMP TrouterMaxY, Y
+	CMP byte_BANK2_8E85, Y
 	BCC loc_BANK2_8EB6
 
 	LDY ObjectTimer1, X
-	BNE EnemyBehavior_Trouter_Exit
+	BNE locret_BANK2_8E78
 
 	STA ObjectYLo, X
-
 	LDY EnemyArray_B1, X
-	LDA TrouterJumpVelocityY, Y
+	LDA byte_BANK2_8E79, Y
 	STA ObjectYVelocity, X
-
 	LDA #$C0
 	STA ObjectTimer1, X
 
 loc_BANK2_8EB6:
-	JSR ApplyObjectPhysics
+	JSR sub_BANK2_9430
 
 	INC ObjectYVelocity, X
 	JMP RenderSprite
@@ -3082,7 +3034,7 @@ loc_BANK2_8F1E:
 	STY ObjectXVelocity, X
 	LDA #$F8
 	STA ObjectYVelocity, X
-	JSR ApplyObjectPhysics
+	JSR sub_BANK2_9430
 
 RenderSprite_Heart:
 	LDA byte_RAM_EE
@@ -3675,7 +3627,7 @@ AttachObjectToBirdo_DoAttach:
 	STA ObjectYVelocity, X
 	PLA
 	PLA
-	LDA #SpriteFlags46E_Damage | SpriteFlags46E_Unliftable | SpriteFlags46E_NoEnemyCollision
+	LDA #%00000111
 	STA EnemyArray_46E, X
 	LDA #$30
 	STA byte_RAM_F4
@@ -4025,7 +3977,7 @@ Phanto_AfterFlashing:
 	STA ObjectShakeTimer, X
 
 	; Play Phanto activation sound effect
-	LDA #SoundEffect3_POWRumble
+	LDA #SoundEffect3_Rumble_B
 	STA SoundEffectQueue3
 
 Phanto_AfterSound:
@@ -4038,7 +3990,7 @@ Phanto_AfterDecrementActivateTimer:
 	STA ObjectYVelocity, X
 
 Phanto_Activated:
-	JMP ApplyObjectPhysics
+	JMP sub_BANK2_9430
 
 
 Enemy_Ninji_JumpVelocity:
@@ -4123,37 +4075,40 @@ EnemyBehavior_Beezo:
 	JSR EnemyBehavior_Check42FPhysicsInterrupt
 
 	JSR IncrementAnimationTimerBy2
+
+loc_BANK2_941D:
 	JSR EnemyBehavior_CheckBeingCarriedTimerInterrupt
 
 	LDA ObjectYVelocity, X
-	BEQ ApplyObjectPhysicsWhoosh
+	BEQ loc_BANK2_9436
 
-	BPL EnemyBehavior_Beezo_Diving
+	BPL loc_BANK2_9429
 
 	STA ObjectProjectileTimer, X
 
-EnemyBehavior_Beezo_Diving:
+loc_BANK2_9429:
 	LDA byte_RAM_10
 	LSR A
-	BCC ApplyObjectPhysics
+	BCC sub_BANK2_9430
 
 	DEC ObjectYVelocity, X
 
+; =============== S U B R O U T I N E =======================================
 
-;
-; Runs horizontal and vertical object physics
-;
-ApplyObjectPhysics:
+sub_BANK2_9430:
 	JSR ApplyObjectPhysicsX
+
 	JMP ApplyObjectPhysicsY
 
+; End of function sub_BANK2_9430
 
-;
-; Runs DOUBLE horizontal and single vertical object physics
-;
-ApplyObjectPhysicsWhoosh:
+; ---------------------------------------------------------------------------
+
+loc_BANK2_9436:
 	JSR ApplyObjectPhysicsX
-	JMP ApplyObjectPhysics
+
+loc_BANK2_9439:
+	JMP sub_BANK2_9430
 
 
 BulletProjectileXSpeeds:
@@ -4277,7 +4232,7 @@ loc_BANK2_94BB:
 	LDY ObjectYVelocity, X
 	BPL loc_BANK2_9503
 
-	AND #CollisionFlags_Up
+	AND #$08
 	BEQ loc_BANK2_94CD
 
 	LDA #$00
@@ -4419,6 +4374,7 @@ EnemyBehavior_Snifit:
 	JMP loc_BANK2_95BB
 
 EnemyBehavior_Snifit_NoBullet:
+loc_BANK2_9574:
 	TXA
 	ASL A
 	ASL A
@@ -4788,9 +4744,9 @@ loc_BANK2_96EC:
 
 	LDA #$20
 	STA POWQuakeTimer
-	LDA #SoundEffect3_POWRumble
+	LDA #SoundEffect3_Rumble_B
 	STA SoundEffectQueue3
-	JMP SetBlockFizzle
+	JMP sub_BANK2_98C4
 
 ; ---------------------------------------------------------------------------
 
@@ -4901,7 +4857,7 @@ loc_BANK2_977F:
 	STY byte_RAM_F4
 
 loc_BANK2_9784:
-	LDA #$7A ; Door opening
+	LDA #$7A
 	JSR RenderSprite_DrawObject
 
 	LDY byte_RAM_F4
@@ -4941,11 +4897,11 @@ loc_BANK2_97AF:
 	STY byte_RAM_F4
 
 loc_BANK2_97BA:
-	LDA #$76 ; Door
+	LDA #$76
 	LDY EnemyArray_477, X
 	BEQ loc_BANK2_97C3
 
-	LDA #$7E ; Door with lock
+	LDA #$7E
 
 loc_BANK2_97C3:
 	JSR RenderSprite_DrawObject
@@ -5158,17 +5114,18 @@ EnemyBehavior_Shell_Render:
 	JMP ApplyObjectMovement
 
 
-;
-; Turns the current sprite into a block fizzle
-;
-SetBlockFizzle:
+; =============== S U B R O U T I N E =======================================
+
+sub_BANK2_98C4:
 	LDA #EnemyState_BlockFizzle
 	STA EnemyState, X
 	LDA #$18
 	STA ObjectTimer1, X
 
-SetBlockFizzle_Exit:
+locret_BANK2_98CC:
 	RTS
+
+; End of function sub_BANK2_98C4
 
 
 ;
@@ -5176,7 +5133,7 @@ SetBlockFizzle_Exit:
 ;
 EnemyBehavior_CheckBeingCarriedTimerInterrupt:
 	LDA ObjectBeingCarriedTimer, X
-	BEQ SetBlockFizzle_Exit
+	BEQ locret_BANK2_98CC
 
 	; Cancel previous subroutine and go into carry mode
 	PLA
@@ -5374,7 +5331,7 @@ EnemyBehavior_CheckDamagedInterrupt_SoundEffect:
 	LDY ObjectType, X
 	; is this enemy a squawker?
 	LDA EnemyArray_46E_Data, Y
-	AND #SpriteFlags46E_DeathSquawk
+	AND #%00001000
 	ASL A ; then A = DPCM_BossDeath
 	BNE EnemyBehavior_CheckDamagedInterrupt_BossDeathSound
 
@@ -5419,9 +5376,9 @@ EnemyTilemap1:
 	; Shyguy
 	.db $D0, $D2 ; $00
 	.db $D4, $D6 ; $02
-	; Wart vegetable (onion)
+	; Wart vegetable? (onion)
 	.db $F8, $F8 ; $04
-	; Wart vegetable (tomato)
+	; Wart vegetable? (tomato)
 	.db $FA, $FA ; $06
 	; Tweeter
 	.db $CC, $CE ; $08
@@ -5451,9 +5408,9 @@ EnemyTilemap1:
 	; Large vegetable
 	.db $FC, $FC ; $2A
 	; Unused? (Leftover third vegetable?)
-	.db $94, $94 ; $2C
+	.db $94 ,$94 ; $2C
 	; Shell
-	.db $96, $96 ; $2E
+	.db $96 ,$96 ; $2E
 	; Coin
 	.db $98, $98 ; $30
 	.db $9A, $9A ; $32
@@ -5898,7 +5855,7 @@ RenderSprite_DrawObject:
 
 	; tilemap switcher
 	LDA EnemyArray_46E, X
-	AND #SpriteFlags46E_Tilemap2
+	AND #%00010000
 	STA byte_RAM_B
 	LDY EnemyMovementDirection, X
 	LDA ObjectAttributes, X
@@ -5951,8 +5908,7 @@ loc_BANK2_9C07:
 	ASL A
 	LDA ObjectAnimationTimer, X
 	LDX byte_RAM_F
-ObjectAnimationTimerMask:
-	AND #$08 ; determines how often to alternate between animation frames
+	AND #$08
 	BEQ loc_BANK2_9C31
 
 	BCC loc_BANK2_9C1F
@@ -5971,7 +5927,7 @@ loc_BANK2_9C1F:
 	INX
 	INX
 	LDA byte_RAM_C
-	AND #SpriteFlags46E_WideSprite
+	AND #$20
 	BEQ loc_BANK2_9C31
 
 	INX
@@ -6481,62 +6437,6 @@ EnemyBehavior_BossDeathSound:
 	RTS
 ENDIF
 
-IFDEF FIX_FRYGUY_SPLIT_COUNT
-Fryguy_AccelerationX:
-	.db $01
-	.db $FF
-
-Fryguy_MaxVelocityX:
-	.db $2A
-	.db $D6
-
-Fryguy_AccelerationY:
-	.db $01
-	.db $FF
-
-Fryguy_MaxVelocityY:
-	.db $18
-	.db $E8
-
-;
-; Determines whether Fryguy has reached/exceeded max y-velocity
-;
-; Output
-;   C = whether or not the Fryguy should reverse acceleration
-;
-Fryguy_IsMaxVelocityY:
-	BMI Fryguy_IsMaxVelocityY_Up
-	CMP Fryguy_MaxVelocityY
-	RTS
-Fryguy_IsMaxVelocityY_Up:
-	CMP Fryguy_MaxVelocityY + $01
-	BEQ Fryguy_IsMaxVelocity_Reverse
-	BCC Fryguy_IsMaxVelocity_Reverse
-	CLC
-	RTS
-
-Fryguy_IsMaxVelocity_Reverse:
-	SEC
-	RTS
-
-;
-; Determines whether Fryguy has reached/exceeded max x-velocity
-;
-; Output
-;   C = whether or not the Fryguy should reverse acceleration
-;
-Fryguy_IsMaxVelocityX:
-	BMI Fryguy_IsMaxVelocityX_Left
-	CMP Fryguy_MaxVelocityX
-	RTS
-Fryguy_IsMaxVelocityX_Left:
-	CMP Fryguy_MaxVelocityX + $01
-	BEQ Fryguy_IsMaxVelocity_Reverse
-	BCC Fryguy_IsMaxVelocity_Reverse
-	CLC
-	RTS
-ENDIF
-
 ; Unused space in the original ($9EBD - $A02F)
 unusedSpace $A030, $FF
 
@@ -7014,20 +6914,19 @@ RenderSprite_Clawgrip_Rock:
 	STA SpriteTempScreenY
 
 loc_BANK3_A2AA:
-	JSR ScreenSpriteClipping_Horizontal
+	JSR sub_BANK2_8894
 
 	LDY #$00
 	STY_abs byte_RAM_F4
 
 	LDA ObjectAttributes, X
 	PHA
-	LDA #ObjAttrib_Palette2
+	LDA #$02
 	STA ObjectAttributes, X
 	LDA EnemyArray_46E, X
 	PHA
-	LDA #SpriteFlags46E_Tilemap2
+	LDA #%00010000
 	STA EnemyArray_46E, X
-RenderSprite_Clawgrip_Rock_Tile:
 	LDA #$D6
 	JSR RenderSprite_DrawObject
 
@@ -7510,7 +7409,7 @@ RenderSprite_Pidgit:
 	PHA
 	SBC #$00
 	STA ObjectXHi, X
-	JSR ScreenSpriteClipping_Horizontal
+	JSR sub_BANK2_8894
 
 	PLA
 	STA ObjectXHi, X
@@ -7687,7 +7586,7 @@ RenderSprite_Mouser:
 	STA ObjectAttributes, X
 
 RenderSprite_Mouser_Hurt:
-	LDA #SpriteFlags46E_Damage | SpriteFlags46E_Unliftable | SpriteFlags46E_Tilemap2 | SpriteFlags46E_WideSprite | SpriteFlags46E_MirrorAnimation
+	LDA #%10110011
 	STA EnemyArray_46E, X
 	LDA #$2C ; hurt sprite
 	BNE RenderSprite_Mouser_DrawObject
@@ -7715,7 +7614,7 @@ RenderSprite_Mouser_Walk:
 RenderSprite_Mouser_Bomb:
 	LDA #ObjAttrib_Palette1
 	STA ObjectAttributes, X
-	LDA #SpriteFlags46E_Tilemap2
+	LDA #%00010000 ; use tilemap 2
 	STA EnemyArray_46E, X
 	LDA SpriteTempScreenX
 	CLC
@@ -7724,7 +7623,6 @@ RenderSprite_Mouser_Bomb:
 	ASL byte_RAM_EE
 	LDY #$00
 	STY_abs byte_RAM_F4
-RenderSprite_Mouser_Bomb_Tile:
 	LDA #$38 ; could have been $34 from tilemap 1 instead
 	JSR RenderSprite_DrawObject
 
@@ -7732,7 +7630,7 @@ RenderSprite_Mouser_Exit:
 	; restore Mouser attributes after drawing the bomb
 	LDA #ObjAttrib_16x32 | ObjAttrib_Palette3
 	STA ObjectAttributes, X
-	LDA #SpriteFlags46E_Damage | SpriteFlags46E_Unliftable | SpriteFlags46E_Tilemap2 | SpriteFlags46E_WideSprite
+	LDA #%00110011
 	STA EnemyArray_46E, X
 
 	RTS
@@ -8015,14 +7913,14 @@ RenderSprite_Tryclyde_DrawBody:
 
 	LDA #ObjAttrib_Palette1 | ObjAttrib_FrontFacing
 	STA ObjectAttributes, X
-	LDA #SpriteFlags46E_Damage | SpriteFlags46E_Unliftable | SpriteFlags46E_Tilemap2 | SpriteFlags46E_WideSprite
+	LDA #%00110011
 	STA EnemyArray_46E, X
 	LDA ObjectXLo, X
 	PHA
 	SEC
 	SBC #$08
 	STA ObjectXLo, X
-	JSR ScreenSpriteClipping_Horizontal
+	JSR sub_BANK2_8894
 
 	LDX #$50 ; tail up
 	LDA byte_RAM_10
@@ -8052,11 +7950,11 @@ RenderSprite_Tryclyde_DrawTail:
 	SEC
 	SBC #$08
 	STA ObjectXLo, X
-	JSR ScreenSpriteClipping_Horizontal
+	JSR sub_BANK2_8894
 
 	PLA
 	STA ObjectXLo, X
-	LDA #SpriteFlags46E_Damage | SpriteFlags46E_Unliftable | SpriteFlags46E_Tilemap2
+	LDA #%00010011
 	STA EnemyArray_46E, X
 	LDA ObjectYLo, X
 	STA byte_RAM_0
@@ -8125,7 +8023,7 @@ RenderSprite_Tryclyde_DrawBottomHead:
 	JSR SetSpriteTiles
 
 	LDX byte_RAM_12
-	LDA #SpriteFlags46E_Damage | SpriteFlags46E_Unliftable | SpriteFlags46E_Tilemap2
+	LDA #%00010011
 	STA EnemyArray_46E, X
 	LDA byte_RAM_EE
 	BNE EnemyBehavior_Tryclyde_SpitFireballs
@@ -8778,7 +8676,7 @@ EnemyBehavior_Rocket_Launching:
 	; Setting EnemyArray_B1 puts the rocket in the area
 	STA EnemyArray_B1, X
 	STA PlayerInRocket
-	LDA #SoundEffect3_Rocket
+	LDA #SoundEffect3_Rumble_A
 	STA SoundEffectQueue3
 	LDA #$FE
 	STA ObjectYVelocity, X
@@ -8885,81 +8783,60 @@ ENDIF
 	STA EnemyVariable, X
 	RTS
 
-
-FryguySplit_InitVelocityX:
+; ---------------------------------------------------------------------------
+byte_BANK3_AC77:
 	.db $E0
 	.db $20
 	.db $F0
 	.db $10
 
-FryguySplit_InitOffsetX:
+byte_BANK3_AC7B:
 	.db $04
 	.db $0C
 	.db $04
 	.db $0C
 
-FryguySplit_InitOffsetY:
+byte_BANK3_AC7F:
 	.db $04
 	.db $04
 	.db $0C
 	.db $0C
 
-IFNDEF FIX_FRYGUY_SPLIT_COUNT
-Fryguy_AccelerationX:
+byte_BANK3_AC83:
 	.db $01
 	.db $FF
 
-Fryguy_MaxVelocityX:
+byte_BANK3_AC85:
 	.db $2A
 	.db $D6
 
-Fryguy_AccelerationY:
+byte_BANK3_AC87:
 	.db $01
 	.db $FF
 
-Fryguy_MaxVelocityY:
+byte_BANK3_AC89:
 	.db $18
 	.db $E8
-ELSE
-	NOP
-	NOP
-	NOP
-	NOP
-ENDIF
+; ---------------------------------------------------------------------------
 
-;
-; Fryguy's motion is oscillation based on accelerating in alternate directions
-; to a max velocity either way
-;
 EnemyBehavior_Fryguy:
 	LDA #$02
 	STA EnemyMovementDirection, X
 	INC ObjectAnimationTimer, X
 	LDY EnemyHP, X
 	DEY
-	BNE EnemyBehavior_Fryguy_MaybeCreateFireball
+	BNE loc_BANK3_ACE7
 
-EnemyBehavior_Fryguy_CreateSplit:
-IFDEF FIX_FRYGUY_SPLIT_COUNT
-	DEY ; Y=$FF
-	STY FryguySplitFlames
-ENDIF
-EnemyBehavior_Fryguy_CreateSplit_NumFlames:
 	LDA #$03
 	STA byte_RAM_9
-IFNDEF FIX_FRYGUY_SPLIT_COUNT
 	STA FryguySplitFlames
-ENDIF
 	JSR EnemyDestroy
 
-EnemyBehavior_Fryguy_CreateSplitLoop:
+loc_BANK3_ACA1:
 	JSR CreateEnemy
 
-	BMI EnemyBehavior_Fryguy_CreateSplit_Next
+	BMI loc_BANK3_ACE3
 
-IFDEF FIX_FRYGUY_SPLIT_COUNT
-	INC FryguySplitFlames
-ENDIF
 	LDY byte_RAM_0
 	LDA ObjectYHi, X
 	STA EndOfLevelDoorPage, Y
@@ -8972,13 +8849,13 @@ ENDIF
 	LDA ObjectYLo, X
 	PHA
 	LDX byte_RAM_9
-	LDA FryguySplit_InitVelocityX, X
+	LDA byte_BANK3_AC77, X
 	STA ObjectXVelocity, Y
 	LDA SpriteTempScreenX
-	ADC FryguySplit_InitOffsetX, X
+	ADC byte_BANK3_AC7B, X
 	STA ObjectXLo, Y
 	PLA
-	ADC FryguySplit_InitOffsetY, X
+	ADC byte_BANK3_AC7F, X
 	STA ObjectYLo, Y
 	LDA #$00
 	STA ObjectXHi, Y
@@ -8988,16 +8865,15 @@ ENDIF
 
 	LDX byte_RAM_12
 
-EnemyBehavior_Fryguy_CreateSplit_Next:
+loc_BANK3_ACE3:
 	DEC byte_RAM_9
-	BPL EnemyBehavior_Fryguy_CreateSplitLoop
+	BPL loc_BANK3_ACA1
 
-EnemyBehavior_Fryguy_MaybeCreateFireball:
+loc_BANK3_ACE7:
 	LDA byte_RAM_10
 	AND #$1F
-	BNE EnemyBehavior_Fryguy_AfterCreateFireball
+	BNE loc_BANK3_AD07
 
-EnemyBehavior_Fryguy_CreateFireball:
 	JSR CreateEnemy
 
 	LDX byte_RAM_0
@@ -9013,54 +8889,37 @@ EnemyBehavior_Fryguy_CreateFireball:
 
 	LDX byte_RAM_12
 
-EnemyBehavior_Fryguy_AfterCreateFireball:
+loc_BANK3_AD07:
 	LDA byte_RAM_10
 	AND #$01
-	BNE EnemyBehavior_Fryguy_ApplyPhysics
+	BNE loc_BANK3_AD37
 
-EnemyBehavior_Fryguy_AccelerationY:
-	; EnemyVariable used for y-direction
 	LDA EnemyVariable, X
 	AND #$01
 	TAY
 	LDA ObjectYVelocity, X
 	CLC
-	ADC Fryguy_AccelerationY, Y
+	ADC byte_BANK3_AC87, Y
 	STA ObjectYVelocity, X
+	CMP byte_BANK3_AC89, Y
+	BNE loc_BANK3_AD21
 
-IFNDEF FIX_FRYGUY_SPLIT_COUNT
-	CMP Fryguy_MaxVelocityY, Y
-	BNE EnemyBehavior_Fryguy_AccelerationX
-ELSE
-	JSR Fryguy_IsMaxVelocityY
-	BCC EnemyBehavior_Fryguy_AccelerationX
-ENDIF
-
-EnemyBehavior_Fryguy_AccelerationY_Reverse:
 	INC EnemyVariable, X
 
-EnemyBehavior_Fryguy_AccelerationX:
-	; EnemyArray_477 used for x-direction
+loc_BANK3_AD21:
 	LDA EnemyArray_477, X
 	AND #$01
 	TAY
 	LDA ObjectXVelocity, X
 	CLC
-	ADC Fryguy_AccelerationX, Y
+	ADC byte_BANK3_AC83, Y
 	STA ObjectXVelocity, X
+	CMP byte_BANK3_AC85, Y
+	BNE loc_BANK3_AD37
 
-IFNDEF FIX_FRYGUY_SPLIT_COUNT
-	CMP Fryguy_MaxVelocityX, Y
-	BNE EnemyBehavior_Fryguy_ApplyPhysics
-ELSE
-	JSR Fryguy_IsMaxVelocityX
-	BCC EnemyBehavior_Fryguy_ApplyPhysics
-ENDIF
-
-EnemyBehavior_Fryguy_AccelerationX_Reverse:
 	INC EnemyArray_477, X
 
-EnemyBehavior_Fryguy_ApplyPhysics:
+loc_BANK3_AD37:
 	JSR RenderSprite_Fryguy
 
 	JSR ApplyObjectPhysicsY
@@ -9087,7 +8946,7 @@ EnemyBehavior_FryguySplit:
 
 	JSR PlayBossHurtSound
 
-	LDA #SpriteFlags46E_00
+	LDA #%00000000
 	STA EnemyArray_46E, X
 	JMP TurnIntoPuffOfSmoke
 
@@ -9317,16 +9176,16 @@ loc_BANK3_AE7C:
 	STA_abs byte_RAM_F4
 	LDA byte_RAM_0
 	STA SpriteTempScreenY
-	LDA #SpriteFlags46E_Tilemap2 | SpriteFlags46E_DoubleSpeed | SpriteFlags46E_MirrorAnimation
+	LDA #%11010000
 	STA EnemyArray_46E, X
 	LDA #$78
 	JSR RenderSprite_DrawObject
 
-	LDA #SpriteFlags46E_Tilemap2 | SpriteFlags46E_DoubleSpeed
+	LDA #$50
 	LDY EnemyArray_B1, X
 	BEQ loc_BANK3_AEA6
 
-	LDA #SpriteFlags46E_Unliftable | SpriteFlags46E_Tilemap2 | SpriteFlags46E_DoubleSpeed
+	LDA #%01010010
 
 loc_BANK3_AEA6:
 	STA EnemyArray_46E, X
@@ -9368,7 +9227,7 @@ loc_BANK3_AEC3:
 	STA ObjectYLo, X
 
 loc_BANK3_AECD:
-	LDA #SoundEffect3_WhaleSpout
+	LDA #SoundEffect3_ShortNoise
 	STA SoundEffectQueue3
 	LDA EnemyVariable, X
 	CMP #$80
@@ -9472,15 +9331,14 @@ loc_BANK3_AF34:
 locret_BANK3_AF74:
 	RTS
 
-
-Flurry_MaxVelocityX:
+; ---------------------------------------------------------------------------
 	.db $1C
+byte_BANK3_AF76:
 	.db $E4
 
-Flurry_AccelerationX:
 	.db $01
 	.db $FF
-
+; ---------------------------------------------------------------------------
 
 EnemyBehavior_Flurry:
 	INC ObjectAnimationTimer, X
@@ -9492,11 +9350,11 @@ EnemyBehavior_Flurry:
 
 	LDA EnemyCollision, X
 	AND #CollisionFlags_Right | CollisionFlags_Left
-	BEQ EnemyBehavior_Flurry_DownCollision
+	BEQ loc_BANK3_AF8D
 
 	JSR EnemyBehavior_TurnAround
 
-EnemyBehavior_Flurry_DownCollision:
+loc_BANK3_AF8D:
 	LDA EnemyCollision, X
 	AND #CollisionFlags_Down
 	BEQ loc_BANK3_AFB4
@@ -9543,11 +9401,11 @@ loc_BANK3_AFBF:
 	BNE loc_BANK3_AFDA
 
 	LDA ObjectXVelocity, X
-	CMP Flurry_MaxVelocityX - 1, Y
+	CMP locret_BANK3_AF74, Y
 	BEQ loc_BANK3_AFDA
 
 	CLC
-	ADC Flurry_AccelerationX - 1, Y
+	ADC byte_BANK3_AF76, Y
 	STA ObjectXVelocity, X
 	INC ObjectAnimationTimer, X
 
@@ -9584,7 +9442,7 @@ byte_BANK3_AFF2:
 EnemyBehavior_HawkmouthBoss:
 	JSR RenderSprite_HawkmouthBoss
 
-	LDA #SpriteFlags46E_Unliftable | SpriteFlags46E_NoEnemyCollision
+	LDA #%00000110
 	STA EnemyArray_46E, X
 	LDA #$02
 	STA EnemyPlayerCollisionTable_RAM + Enemy_HawkmouthBoss
@@ -9693,7 +9551,7 @@ locret_BANK3_B09A:
 ; ---------------------------------------------------------------------------
 
 loc_BANK3_B09B:
-	LDA #SpriteFlags46E_Damage | SpriteFlags46E_Unliftable
+	LDA #%00000011
 	STA EnemyArray_46E, X
 	LDA #$00
 	STA EnemyPlayerCollisionTable_RAM + Enemy_HawkmouthBoss
@@ -9737,7 +9595,7 @@ loc_BANK3_B0D3:
 	STA ObjectXVelocity, X
 
 loc_BANK3_B0E3:
-	JMP ApplyObjectPhysics
+	JMP sub_BANK2_9430
 
 ; ---------------------------------------------------------------------------
 byte_BANK3_B0E6:
@@ -10243,8 +10101,7 @@ RenderSprite_Wart_Exit:
 unusedSpace $B4E0, $FF
 
 
-; Used for static objects (e.g. keys)
-ObjectConveyorSpeedTable:
+byte_BANK3_B4E0:
 	.db $F0
 	.db $10
 
@@ -10395,18 +10252,16 @@ ENDIF
 	CPY #Enemy_VegetableSmall
 	BCC loc_BANK3_B56C
 
-	; Inanimate object on a conveyor belt
 	TAY
 	LDA ObjectYVelocity - 1, X
 	CMP #$03
 	BCS loc_BANK3_B57B
 
-	; Check collision flags
 	LDA byte_RAM_D
-	AND #CollisionFlags_Right | CollisionFlags_Left
+	AND #$03
 	BNE loc_BANK3_B57B
 
-	LDA ObjectConveyorSpeedTable, Y
+	LDA byte_BANK3_B4E0, Y
 	STA ObjectXVelocity - 1, X
 	STA byte_RAM_B
 	BNE loc_BANK3_B57B
@@ -10665,7 +10520,7 @@ CheckObjectCollision_OtherObject:
 
 	; Check if collision is disabled
 	LDA EnemyArray_46E, Y
-	AND #SpriteFlags46E_NoEnemyCollision
+	AND #%00000100
 	BNE CheckObjectCollision_NextIfNotEqual ; effectively `JMP CheckObjectCollision_Next`
 
 CheckObjectCollision_CheckOtherObjectState:
@@ -10884,7 +10739,7 @@ loc_BANK3_B792:
 	BNE loc_BANK3_B7D7
 
 	LDA EnemyArray_46E, Y
-	AND #SpriteFlags46E_DeathSquawk
+	AND #%00001000
 	BEQ loc_BANK3_B7A4
 
 	JSR PlayBossHurtSound
@@ -11024,7 +10879,7 @@ CheckCollisionWithPlayer_NotWart:
 
 ; turn into a puff of smoke
 CheckCollisionWithPlayer_Poof:
-	LDA #SpriteFlags46E_00
+	LDA #%00000000
 	STA EnemyArray_46E, X
 	JSR EnemyBehavior_Shell_Destroy
 
@@ -11059,7 +10914,7 @@ CheckCollisionWithPlayer_NotInvincible:
 
 	; should we damage the player for jumping on top?
 	LDA EnemyArray_46E, Y
-	AND #SpriteFlags46E_Damage
+	AND #%00000001
 	BNE CheckCollisionWithPlayer_HurtPlayer
 
 	; let player land on top
@@ -11083,7 +10938,7 @@ CheckCollisionWithPlayer_StandingOnHead:
 
 	; can you even lift
 	LDA EnemyArray_46E, X
-	AND #SpriteFlags46E_Unliftable
+	AND #%00000010
 	BNE CheckCollisionWithPlayer_NoLift
 
 	; check B button
